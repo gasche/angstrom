@@ -30,6 +30,20 @@ let make_endian name p        = make_bench name (Angstrom.skip_many p)   zero
 let make_json   name contents = make_bench name RFC7159.json             contents
 let make_http   name contents = make_bench name (Angstrom.skip_many RFC2616.request) contents
 
+let make_bench_crade _name parser contents =
+  (* Bench.Test.create ~name *) (fun () ->
+    match Angstrom.(parse_bigstring parser contents) with
+    | Ok _ -> ()
+    | Error err -> failwith err)
+;;
+
+let make_endian_crade name p =
+  make_bench_crade name (Angstrom.skip_many p)   zero
+let make_json_crade name contents =
+  make_bench_crade name RFC7159.json             contents
+let make_http_crade name contents =
+  make_bench_crade name (Angstrom.skip_many RFC2616.request) contents
+
 (* For input files involving trailing numbers, .e.g, [http-requests.txt.100],
  * go into the [benchmarks/data] directory and use the [replicate] script to
  * generate the file, i.e.,
@@ -58,10 +72,10 @@ let main () =
     ]
   in
   let http =
-    Bench.make_command [ make_http "http" http_get ] 
+    Bench.make_command [ make_http "http" http_get ]
   in
   let numbers =
-    Bench.make_command [ 
+    Bench.make_command [
       Bench.Test.create ~name:"float" (fun () ->
         float_of_string "1.7242915150166418e+36");
       Bench.Test.create ~name:"int" (fun () ->
@@ -111,7 +125,7 @@ let main () =
     ]
   in
   Command.run
-    (Command.group ~summary:"various angstrom benchmarks" 
+    (Command.group ~summary:"various angstrom benchmarks"
       [ "json"         , json
       ; "endian"       , endian
       ; "http"         , http
@@ -122,4 +136,15 @@ let main () =
       ; "http-version" , http_version
     ])
 
-let () = main ()
+let main_crade ~n () =
+  let avant = Gc.minor_words () in
+  let contents = Bigstring.of_string "HTTP/" in
+  for _i = 1 to n do
+    make_http_crade () contents ()
+  done;
+  let apres = Gc.minor_words () in
+  Printf.eprintf "minor words diff: %d\n%!" (apres - avant);
+  ()
+
+let () =
+  main_crade ~n:1_000_000 ()
